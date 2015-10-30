@@ -1,8 +1,10 @@
 # -*- encoding: utf-8 -*-
 from six.moves.urllib.parse import urlparse
+from thefuck.utils import for_app
 
 
-def match(command, settings):
+@for_app('whois', at_least=1)
+def match(command):
     """
     What the `whois` command returns depends on the 'Whois server' it contacted
     and is not consistent through different servers. But there can be only two
@@ -19,13 +21,14 @@ def match(command, settings):
         - www.google.fr → subdomain: www, domain: 'google.fr';
         - google.co.uk → subdomain: None, domain; 'google.co.uk'.
     """
-    return 'whois' in command.script and len(command.script.split()) > 1
+    return True
 
 
-def get_new_command(command, settings):
-    url = command.script.split()[1]
+def get_new_command(command):
+    url = command.script_parts[1]
 
     if '/' in command.script:
         return 'whois ' + urlparse(url).netloc
     elif '.' in command.script:
-        return 'whois ' + '.'.join(urlparse(url).path.split('.')[1:])
+        path = urlparse(url).path.split('.')
+        return ['whois ' + '.'.join(path[n:]) for n in range(1, len(path))]

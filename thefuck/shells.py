@@ -1,6 +1,6 @@
 """Module with shell specific actions, each shell class should
-implement `from_shell`, `to_shell`, `app_alias`, `put_to_history` and `get_aliases`
-methods.
+implement `from_shell`, `to_shell`, `app_alias`, `put_to_history` and
+`get_aliases` methods.
 
 """
 from collections import defaultdict
@@ -9,7 +9,9 @@ from subprocess import Popen, PIPE
 from time import time
 import io
 import os
-from .utils import DEVNULL, memoize
+import shlex
+import six
+from .utils import DEVNULL, memoize, cache
 
 
 class Generic(object):
@@ -72,6 +74,23 @@ class Generic(object):
     def and_(self, *commands):
         return u' && '.join(commands)
 
+    def how_to_configure(self):
+        return
+
+    def split_command(self, command):
+        """Split the command using shell-like syntax."""
+        return shlex.split(command)
+
+    def quote(self, s):
+        """Return a shell-escaped version of the string s."""
+
+        if six.PY2:
+            from pipes import quote
+        else:
+            from shlex import quote
+
+        return quote(s)
+
 
 class Bash(Generic):
     def app_alias(self, fuck):
@@ -84,9 +103,10 @@ class Bash(Generic):
             value = value[1:-1]
         return name, value
 
+    @memoize
+    @cache('.bashrc', '.bash_profile')
     def get_aliases(self):
-        proc = Popen('bash -ic alias', stdout=PIPE, stderr=DEVNULL,
-                     shell=True)
+        proc = Popen(['bash', '-ic', 'alias'], stdout=PIPE, stderr=DEVNULL)
         return dict(
             self._parse_alias(alias)
             for alias in proc.stdout.read().decode('utf-8').split('\n')
@@ -102,6 +122,15 @@ class Bash(Generic):
     def _script_from_history(self, line):
         return line
 
+    def how_to_configure(self):
+        if os.path.join(os.path.expanduser('~'), '.bashrc'):
+            config = '~/.bashrc'
+        elif os.path.join(os.path.expanduser('~'), '.bash_profile'):
+            config = '~/.bashrc'
+        else:
+            config = 'bash config'
+        return 'eval $(thefuck --alias)', config
+
 
 class Fish(Generic):
 
@@ -113,24 +142,25 @@ class Fish(Generic):
             return ['cd', 'grep', 'ls', 'man', 'open']
 
     def app_alias(self, fuck):
-        return ("set TF_ALIAS {0}\n"
-                "function {0} -d 'Correct your previous console command'\n"
-                "    set -l exit_code $status\n"
-                "    set -l eval_script"
-                " (mktemp 2>/dev/null ; or mktemp -t 'thefuck')\n"
-                "    set -l fucked_up_commandd $history[1]\n"
-                "    thefuck $fucked_up_commandd > $eval_script\n"
-                "    . $eval_script\n"
-                "    rm $eval_script\n"
-                "    if test $exit_code -ne 0\n"
-                "        history --delete $fucked_up_commandd\n"
-                "    end\n"
-                "end").format(fuck)
+        return ('function {0} -d "Correct your previous console command"\n'
+                '    set -l exit_code $status\n'
+                '    set -x TF_ALIAS {0}\n'
+                '    set -l fucked_up_command $history[1]\n'
+                '    thefuck $fucked_up_command | read -l unfucked_command\n'
+                '    if [ "$unfucked_command" != "" ]\n'
+                '        eval $unfucked_command\n'
+                '        if test $exit_code -ne 0\n'
+                '            history --delete $fucked_up_command\n'
+                '            history --merge ^ /dev/null\n'
+                '            return 0\n'
+                '        end\n'
+                '    end\n'
+                'end').format(fuck)
 
+    @memoize
     def get_aliases(self):
         overridden = self._get_overridden_aliases()
-        proc = Popen('fish -ic functions', stdout=PIPE, stderr=DEVNULL,
-                     shell=True)
+        proc = Popen(['fish', '-ic', 'functions'], stdout=PIPE, stderr=DEVNULL)
         functions = proc.stdout.read().decode('utf-8').strip().split('\n')
         return {func: func for func in functions if func not in overridden}
 
@@ -155,6 +185,9 @@ class Fish(Generic):
     def and_(self, *commands):
         return u'; and '.join(commands)
 
+    def how_to_configure(self):
+        return 'eval thefuck --alias', '~/.config/fish/config.fish'
+
 
 class Zsh(Generic):
     def app_alias(self, fuck):
@@ -168,9 +201,10 @@ class Zsh(Generic):
             value = value[1:-1]
         return name, value
 
+    @memoize
+    @cache('.zshrc')
     def get_aliases(self):
-        proc = Popen('zsh -ic alias', stdout=PIPE, stderr=DEVNULL,
-                     shell=True)
+        proc = Popen(['zsh', '-ic', 'alias'], stdout=PIPE, stderr=DEVNULL)
         return dict(
             self._parse_alias(alias)
             for alias in proc.stdout.read().decode('utf-8').split('\n')
@@ -189,6 +223,9 @@ class Zsh(Generic):
         else:
             return ''
 
+    def how_to_configure(self):
+        return 'eval $(thefuck --alias)', '~/.zshrc'
+
 
 class Tcsh(Generic):
     def app_alias(self, fuck):
@@ -200,9 +237,9 @@ class Tcsh(Generic):
         name, value = alias.split("\t", 1)
         return name, value
 
+    @memoize
     def get_aliases(self):
-        proc = Popen('tcsh -ic alias', stdout=PIPE, stderr=DEVNULL,
-                     shell=True)
+        proc = Popen(['tcsh', '-ic', 'alias'], stdout=PIPE, stderr=DEVNULL)
         return dict(
             self._parse_alias(alias)
             for alias in proc.stdout.read().decode('utf-8').split('\n')
@@ -215,8 +252,11 @@ class Tcsh(Generic):
     def _get_history_line(self, command_script):
         return u'#+{}\n{}\n'.format(int(time()), command_script)
 
+    def how_to_configure(self):
+        return 'eval `thefuck --alias`', '~/.tcshrc'
 
-shells = defaultdict(lambda: Generic(), {
+
+shells = defaultdict(Generic, {
     'bash': Bash(),
     'fish': Fish(),
     'zsh': Zsh(),
@@ -257,11 +297,22 @@ def and_(*commands):
     return _get_shell().and_(*commands)
 
 
-@memoize
 def get_aliases():
     return list(_get_shell().get_aliases().keys())
+
+
+def split_command(command):
+    return _get_shell().split_command(command)
+
+
+def quote(s):
+    return _get_shell().quote(s)
 
 
 @memoize
 def get_history():
     return list(_get_shell().get_history())
+
+
+def how_to_configure():
+    return _get_shell().how_to_configure()

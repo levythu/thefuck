@@ -11,9 +11,11 @@ source_layouts = [u'''йцукенгшщзхъфывапролджэячсмит
 
 @memoize
 def _get_matched_layout(command):
+    # don't use command.split_script here because a layout mismatch will likely
+    # result in a non-splitable sript as per shlex
+    cmd = command.script.split(' ')
     for source_layout in source_layouts:
-        if all([ch in source_layout or ch in '-_'
-                for ch in command.script.split(' ')[0]]):
+        if all([ch in source_layout or ch in '-_' for ch in cmd[0]]):
             return source_layout
 
 
@@ -28,7 +30,7 @@ def _switch_command(command, layout):
     return ''.join(_switch(ch, layout) for ch in command.script)
 
 
-def match(command, settings):
+def match(command):
     if 'not found' not in command.stderr:
         return False
     matched_layout = _get_matched_layout(command)
@@ -36,6 +38,6 @@ def match(command, settings):
            _switch_command(command, matched_layout) != thefuck_alias()
 
 
-def get_new_command(command, settings):
+def get_new_command(command):
     matched_layout = _get_matched_layout(command)
     return _switch_command(command, matched_layout)

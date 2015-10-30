@@ -1,21 +1,22 @@
 """
 The confusion in systemctl's param order is massive.
 """
-from thefuck.utils import sudo_support
+from thefuck.specific.sudo import sudo_support
+from thefuck.utils import for_app
 
 
 @sudo_support
-def match(command, settings):
-    # Catches 'Unknown operation 'service'.' when executing systemctl with
+@for_app('systemctl')
+def match(command):
+    # Catches "Unknown operation 'service'." when executing systemctl with
     # misordered arguments
-    cmd = command.script.split()
-    return ('systemctl' in command.script and
-            'Unknown operation \'' in command.stderr and
+    cmd = command.script_parts
+    return (cmd and 'Unknown operation \'' in command.stderr and
             len(cmd) - cmd.index('systemctl') == 3)
 
 
 @sudo_support
-def get_new_command(command, settings):
-    cmd = command.script.split()
+def get_new_command(command):
+    cmd = command.script_parts
     cmd[-1], cmd[-2] = cmd[-2], cmd[-1]
     return ' '.join(cmd)

@@ -1,6 +1,6 @@
 import pytest
 from thefuck.rules.brew_install import match, get_new_command
-from thefuck.rules.brew_install import brew_formulas
+from thefuck.rules.brew_install import _get_formulas
 from tests.utils import Command
 
 
@@ -20,9 +20,7 @@ def brew_already_installed():
 
 
 def _is_not_okay_to_test():
-    if 'elasticsearch' not in brew_formulas:
-        return True
-    return False
+    return 'elasticsearch' not in _get_formulas()
 
 
 @pytest.mark.skipif(_is_not_okay_to_test(),
@@ -30,20 +28,19 @@ def _is_not_okay_to_test():
 def test_match(brew_no_available_formula, brew_already_installed,
                brew_install_no_argument):
     assert match(Command('brew install elsticsearch',
-                         stderr=brew_no_available_formula), None)
+                         stderr=brew_no_available_formula))
     assert not match(Command('brew install git',
-                             stderr=brew_already_installed), None)
-    assert not match(Command('brew install', stderr=brew_install_no_argument),
-                     None)
+                             stderr=brew_already_installed))
+    assert not match(Command('brew install', stderr=brew_install_no_argument))
 
 
 @pytest.mark.skipif(_is_not_okay_to_test(),
                     reason='No need to run if there\'s no formula')
 def test_get_new_command(brew_no_available_formula):
     assert get_new_command(Command('brew install elsticsearch',
-                                   stderr=brew_no_available_formula), None)\
+                                   stderr=brew_no_available_formula))\
         == 'brew install elasticsearch'
 
     assert get_new_command(Command('brew install aa',
-                                   stderr=brew_no_available_formula),
-                           None) != 'brew install aha'
+                                   stderr=brew_no_available_formula))\
+        != 'brew install aha'

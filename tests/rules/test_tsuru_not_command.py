@@ -30,7 +30,7 @@ from thefuck.rules.tsuru_not_command import match, get_new_command
     )),
 ])
 def test_match(command):
-    assert match(command, None)
+    assert match(command)
 
 
 @pytest.mark.parametrize('command', [
@@ -58,33 +58,33 @@ def test_match(command):
     Command('tsuru env-get', stderr='Error: App thefuck not found.'),
 ])
 def test_not_match(command):
-    assert not match(command, None)
+    assert not match(command)
 
 
-@pytest.mark.parametrize('command, new_command', [
+@pytest.mark.parametrize('command, new_commands', [
     (Command('tsuru log', stderr=(
         'tsuru: "log" is not a tsuru command. See "tsuru help".\n'
         '\nDid you mean?\n'
         '\tapp-log\n'
         '\tlogin\n'
         '\tlogout\n'
-    )), 'tsuru login'),
+    )), ['tsuru login', 'tsuru logout', 'tsuru app-log']),
     (Command('tsuru app-l', stderr=(
         'tsuru: "app-l" is not a tsuru command. See "tsuru help".\n'
         '\nDid you mean?\n'
         '\tapp-list\n'
         '\tapp-log\n'
-    )), 'tsuru app-log'),
+    )), ['tsuru app-log', 'tsuru app-list']),
     (Command('tsuru user-list', stderr=(
         'tsuru: "user-list" is not a tsuru command. See "tsuru help".\n'
         '\nDid you mean?\n'
         '\tteam-user-list\n'
-    )), 'tsuru team-user-list'),
+    )), ['tsuru team-user-list']),
     (Command('tsuru targetlist', stderr=(
         'tsuru: "targetlist" is not a tsuru command. See "tsuru help".\n'
         '\nDid you mean?\n'
         '\ttarget-list\n'
-    )), 'tsuru target-list'),
+    )), ['tsuru target-list']),
 ])
-def test_get_new_command(command, new_command):
-    assert get_new_command(command, None) == new_command
+def test_get_new_command(command, new_commands):
+    assert get_new_command(command) == new_commands
